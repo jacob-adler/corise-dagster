@@ -50,26 +50,38 @@ def csv_helper(file_name: str) -> Iterator[Stock]:
             yield Stock.from_list(row)
 
 
-@op
-def get_s3_data_op():
-    pass
+@op(config_schema={"s3_key": String})
+def get_s3_data_op(context) -> List[Stock]:
+    """Bring in data, process into custom data type. Input is provided via config_schema"""
+    return list(csv_helper(context.op_config["s3_key"]))
 
 
 @op
-def process_data_op():
+def process_data_op(context, stocks: List[Stock]) -> Aggregation:
+    """Take the output of get_s3_data (list of Stock) and output a type Aggregation).
+    Take the list of stocks and determine the Stock with the greatest high value"""
+    max_value = stocks[0].high
+    max_value_date = stocks[0].date
+    for stock in stocks:
+        if stock.high > max_value:
+            max_value = stock.high
+            max_value_date = stock.date
+    return Aggregation(date=max_value_date, high=max_value)
+
+
+@op(ins={"aggregation": In(dagster_type=Aggregation)})
+def put_redis_data_op(context, aggregation) -> Nothing:
+    """Upload an Aggregation to Redis"""
     pass
 
 
-@op
-def put_redis_data_op():
+@op(ins={"aggregation": In(dagster_type=Aggregation)})
+def put_s3_data_op(context, aggregation) -> Nothing:
+    """Upload an Aggregation to S3 File"""
     pass
-
-
-@op
-def put_s3_data_op():
-    pass
-
 
 @job
 def machine_learning_job():
-    pass
+    aggregated = process_data_op(get_s3_data_op())
+    put_redis_data_op(aggregated)
+    put_s3_data_op(aggregated)
