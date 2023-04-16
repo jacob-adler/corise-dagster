@@ -48,10 +48,12 @@ def insert_dbt_data(context: OpExecutionContext, table_name: String):
 
     context.log.info("Batch inserted")
 
-
-@graph
+@graph(
+    resource_defs={"dbt": dbt_cli_resource}
+)
 def dbt_graph():
-    pass
+    dbt_run_op()
+    dbt_test_op()
 
 
 docker = {
